@@ -1,0 +1,23 @@
+- Async send message to prevent blocking on one or all clients
+- Thread limits
+- Joining threads
+- Custom app IDs 
+- URL parttern recognition and error handling
+- Disconnecting of clients
+- Binary data transfer support
+- global app and channel settings
+- Web service producer using Django
+- WSSL support
+- Path management
+- Channels
+- Groups
+- Async thread workers in apps
+- Worker QUEs
+- Public settings for all apps and channels
+- Data sharing among apps
+- Database support 
+- Database settings
+- Database Connection sharing
+- service injection
+- Web UI CLi
+- pallel and concurrent mode

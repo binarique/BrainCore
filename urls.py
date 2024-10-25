@@ -3,13 +3,13 @@ import View
 
 urls = [
     {
-        "route": "/",
+        "path": "/",
         "app": View.MyApp,
-        "name": "Face recognition",
+        "name": "Demo app",
     },
-    # {
-    #     "route": "/chat/",
-    #     "app": View.ChatBot,
-    #     "name": "Chat",
-    # },
+    {
+        "path": "/chat/",
+        "app": View.ChatBot,
+        "name": "Chat",
+    },
 ]

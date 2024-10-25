@@ -9,6 +9,8 @@ import math
 # WS ASYNC SERVER
 SERVER_PORT = 5060
 SERVER_IP = "0.0.0.0"
+THREAD_LIMIT = 500
+JOIN_THREADS = False
 #### HTTP PRODUCER
 SERVICE_IP = "127.0.0.1"
 SERVICE_PORT = 8000
@@ -20,7 +22,7 @@ CLIENTS_IDS = set()
 ###############################
 
 CLIENT_APPS = {}
-URLS = {}
+PATHS = {}
 
 
 def getURLPath(path):
@@ -39,21 +41,16 @@ def ClientIdExists(clientId):
     return exists
 
 
-def AppWorker(
-    websocket, clients, clientsIds, _queue, _event, clientId, path, clientAppId
-):
-    App = URLS[path]
+def AppWorker(websocket, clients, clientsIds, _queue, clientId, path, clientAppId):
+    App = PATHS[path]
     asyncio.run(
-        App(
-            websocket, clients, clientsIds, _queue, _event, clientId, path, clientAppId
-        ).run()
+        App(websocket, clients, clientsIds, _queue, clientId, path, clientAppId).run()
     )
 
 
-def initAppThreads(websocket, path, clientId):
+def initApps(websocket, path, clientId):
     clientAppId = getClientAppId(path, clientId)
-    if path in URLS:
-        _event = threading.Event()
+    if path in PATHS:
         _queue = queue.Queue()
         _thread = threading.Thread(
             target=AppWorker,
@@ -62,7 +59,6 @@ def initAppThreads(websocket, path, clientId):
                 CLIENTS,
                 CLIENTS_IDS,
                 _queue,
-                _event,
                 clientId,
                 path,
                 clientAppId,
@@ -71,14 +67,15 @@ def initAppThreads(websocket, path, clientId):
         _thread.start()
         CLIENT_APPS[clientAppId] = {
             "thread": _thread,
-            "event": _event,
             "queue": _queue,
             "clientId": clientId,
             "path": path,
             "websocket": websocket,
         }
+        # Thread que
         _queue.put(
             {
+                "event": "open",
                 "clients": CLIENTS,
                 "clientIds": CLIENTS_IDS,
                 "clientId": clientId,
@@ -97,7 +94,7 @@ async def register(websocket, path, clientId):
     print(f"Client ID: " + clientId + " connected and registered")
     CLIENTS.add(websocket)
     CLIENTS_IDS.add(clientId)
-    initAppThreads(websocket, path, clientId)
+    initApps(websocket, path, clientId)
     ###############################################
     print(f"No of connected  clients: {len(CLIENTS)}")
     print(f"No of connected  clients Apps: {len(CLIENT_APPS)}")
@@ -113,38 +110,43 @@ async def unregister(websocket, path, clientId):
         CLIENTS.remove(websocket)
         CLIENTS_IDS.remove(clientId)
         _thread = CLIENT_APP["thread"]
-        _event = CLIENT_APP["event"]
-        if _thread.is_alive():  # first stop the thread if it is still alive
-            _event.set()
+        _queue = CLIENT_APP["queue"]
+        if _thread.is_alive():  # if thread is alive
+            # send message to apps
+            try:
+                _queue.put(
+                    {
+                        "event": "close",
+                        "clients": CLIENTS,
+                        "clientIds": CLIENTS_IDS,
+                        "clientId": clientId,
+                        "clientAppId": clientAppId,
+                        "path": path,
+                        "message": "",
+                    }
+                )
+            except Exception as e:
+                print(f"Error: {e}")
         ### remove session from SESSION QUE
         CLIENT_APPS.pop(clientAppId)
         print(f"Removed Client {clientId} App at path {path}")
         print(f"No of connected  clients Apps: {len(CLIENT_APPS)}")
 
 
-async def NotifyListeners(message):
-    print(f"Notifying listeners...")
-    for client in CLIENTS:
-        try:
-            await client.send(message)
-        except:
-            pass
-
-
+# Client Handler
 async def HandleClient(message, ws, path, clientId):
     clientAppId = getClientAppId(path, clientId)
-    await NotifyListeners(message)
     CLIENT_APP = CLIENT_APPS[clientAppId]
     # print("Path: " + path)
     # print(f"Message: " + message)
     # print(f"From Client ID: " + clientId)
     _thread = CLIENT_APP["thread"]
-    _event = CLIENT_APP["event"]
     _queue = CLIENT_APP["queue"]
     if _thread.is_alive():  # if thread is alive
-        # send new client to all scrapping threads
+        # send message to apps
         _queue.put(
             {
+                "event": "message",
                 "clients": CLIENTS,
                 "clientIds": CLIENTS_IDS,
                 "clientId": clientId,
@@ -176,10 +178,10 @@ async def BrainServer(websocket, path):
 def initURLs():
     print("Initailizing apps urls...")
     for url in urls.urls:
-        route = url["route"]
+        path = url["path"]
         app = url["app"]
-        URLS[route] = app
-    print(f"Initailizing {len(URLS)} apps urls")
+        PATHS[path] = app
+    print(f"Initailizing {len(PATHS)} apps urls")
 
 
 # Main
